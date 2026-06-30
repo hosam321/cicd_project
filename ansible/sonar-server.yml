@@ -1,0 +1,98 @@
+---
+- name: Configure EC2 as SonarQube Server
+  hosts: sonarqube_server
+  become: yes
+
+  tasks:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - openssh-server
+        state: present
+
+    - name: Ensure Docker service is started and enabled
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ensure SSH service is started and enabled
+      service:
+        name: ssh
+        state: started
+        enabled: yes
+
+    - name: Ensure docker group exists
+      group:
+        name: docker
+        state: present
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    # Required by SonarQube (Elasticsearch)
+    - name: Set vm.max_map_count
+      sysctl:
+        name: vm.max_map_count
+        value: "524288"
+        state: present
+        reload: yes
+
+    - name: Create SonarQube directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+      loop:
+        - /opt/sonarqube
+        - /opt/sonarqube/data
+        - /opt/sonarqube/extensions
+        - /opt/sonarqube/logs
+
+    - name: Pull SonarQube image
+      command: docker pull sonarqube:lts-community
+      changed_when: false
+
+    - name: Remove existing SonarQube container if present
+      shell: docker rm -f sonarqube || true
+
+    - name: Run SonarQube container
+      shell: |
+        docker run -d \
+          --name sonarqube \
+          --restart unless-stopped \
+          -p 9000:9000 \
+          -v /opt/sonarqube/data:/opt/sonarqube/data \
+          -v /opt/sonarqube/extensions:/opt/sonarqube/extensions \
+          -v /opt/sonarqube/logs:/opt/sonarqube/logs \
+          sonarqube:lts-community
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        var: docker_version.stdout_lines
+
+    - name: Verify SonarQube container is running
+      command: docker ps
+      register: docker_ps
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        var: docker_ps.stdout_lines

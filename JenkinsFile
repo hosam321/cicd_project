@@ -1,0 +1,112 @@
+pipeline {
+    agent { label 'ec2' }
+
+    environment {
+        DOCKER_IMAGE = "mo7iiee/spring-app:${BUILD_NUMBER}"
+        SONAR_URL    = "http://<SONAR_SERVER_IP>:9000"
+        GIT_USER     = "mo7iee"
+        GIT_REPO     = "Jenkins-ArgoCD"
+    }
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '📥 Checking out code...'
+                git branch: 'main',
+                    url: 'https://github.com/mo7iee/Jenkins-ArgoCD.git'
+            }
+        }
+
+        stage('Build and Test') {
+            steps {
+                echo '🔨 Building the application...'
+                sh '''
+                    cd spring-boot-app
+                    mvn clean package
+                '''
+            }
+        }
+
+        // stage('Static Code Analysis') {
+        //     steps {
+        //         echo '🔍 Running SonarQube analysis...'
+
+        //         withCredentials([
+        //             string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')
+        //         ]) {
+        //             sh '''
+        //                 cd spring-boot-app
+
+        //                 mvn sonar:sonar \
+        //                   -Dsonar.host.url=$SONAR_URL \
+        //                   -Dsonar.login=$SONAR_AUTH_TOKEN
+        //             '''
+        //         }
+        //     }
+        // }
+
+        stage('Build and Push Docker Image') {
+            steps {
+                echo '🐳 Building and pushing Docker image...'
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'docker-cred',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+                        cd spring-boot-app
+
+                        docker build -t $DOCKER_IMAGE .
+
+                        docker push $DOCKER_IMAGE
+
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Update Deployment Manifest') {
+            steps {
+                echo '📝 Updating Kubernetes deployment manifest...'
+
+                withCredentials([
+                    string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')
+                ]) {
+                    sh '''
+                        git config user.name "mo7iee"
+                        git config user.email "mohie707034@gmail.com"
+
+                        sed -Ei "s|(image: mo7iiee/spring-app:).*|\\1${BUILD_NUMBER}|" \
+                        spring-boot-app-manifests/deployment.yml
+
+                        git add spring-boot-app-manifests/deployment.yml
+
+                        git commit -m "Update image to ${BUILD_NUMBER}" || true
+
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER}/${GIT_REPO}.git HEAD:main
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Pipeline failed.'
+        }
+
+        always {
+            cleanWs()
+        }
+    }
+}
