@@ -2,10 +2,10 @@ pipeline {
     agent { label 'ec2' }
 
     environment {
-        DOCKER_IMAGE = "mo7iiee/spring-app:${BUILD_NUMBER}"
+        DOCKER_IMAGE = "hossamaboalela/spring-app:${BUILD_NUMBER}"
         SONAR_URL    = "http://<SONAR_SERVER_IP>:9000"
-        GIT_USER     = "mo7iee"
-        GIT_REPO     = "Jenkins-ArgoCD"
+        GIT_USER     = "hossam321"
+        GIT_REPO     = "cicd_project"
     }
     stages {
 
@@ -13,7 +13,7 @@ pipeline {
             steps {
                 echo '📥 Checking out code...'
                 git branch: 'main',
-                    url: 'https://github.com/mo7iee/Jenkins-ArgoCD.git'
+                    url: 'https://github.com/hosam321/cicd_project.git'
             }
         }
 
@@ -71,29 +71,29 @@ pipeline {
             }
         }
 
-        stage('Update Deployment Manifest') {
-            steps {
-                echo '📝 Updating Kubernetes deployment manifest...'
+        // stage('Update Deployment Manifest') {
+        //     steps {
+        //         echo '📝 Updating Kubernetes deployment manifest...'
 
-                withCredentials([
-                    string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')
-                ]) {
-                    sh '''
-                        git config user.name "mo7iee"
-                        git config user.email "mohie707034@gmail.com"
+        //         withCredentials([
+        //             string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')
+        //         ]) {
+        //             sh '''
+        //                 git config user.name "mo7iee"
+        //                 git config user.email "mohie707034@gmail.com"
 
-                        sed -Ei "s|(image: mo7iiee/spring-app:).*|\\1${BUILD_NUMBER}|" \
-                        spring-boot-app-manifests/deployment.yml
+        //                 sed -Ei "s|(image: mo7iiee/spring-app:).*|\\1${BUILD_NUMBER}|" \
+        //                 spring-boot-app-manifests/deployment.yml
 
-                        git add spring-boot-app-manifests/deployment.yml
+        //                 git add spring-boot-app-manifests/deployment.yml
 
-                        git commit -m "Update image to ${BUILD_NUMBER}" || true
+        //                 git commit -m "Update image to ${BUILD_NUMBER}" || true
 
-                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER}/${GIT_REPO}.git HEAD:main
-                    '''
-                }
-            }
-        }
+        //                 git push https://${GITHUB_TOKEN}@github.com/${GIT_USER}/${GIT_REPO}.git HEAD:main
+        //             '''
+        //         }
+        //     }
+        // }
     }
 
     post {
